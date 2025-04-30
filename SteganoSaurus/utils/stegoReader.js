@@ -1,10 +1,10 @@
-import { decode } from 'steganography.js'
+// utils/stegoReader.js
+import { decode as decodeNode } from '@masknet/stego-js/cjs/node'
 
 export function readStego(buffer) {
   try {
-    // decode takes an <img> element; but steganography.js can decode from canvas
-    // we’ll send the raw data back and decode client-side
-    return null // server does nothing; decode in browser
+    const hidden = decodeNode(buffer)
+    return hidden || null
   } catch (err) {
     return null
   }
