@@ -10,16 +10,13 @@ export default function Home() {
     if (!file) return
     const form = new FormData()
     form.append('image', file)
+
     const res = await fetch('/api/upload', { method: 'POST', body: form })
     const json = await res.json()
     setInfo(json)
-    // decode stego on client
-    const img = new Image()
-    img.src = json.dataUrl
-    img.onload = () => {
-      const msg = window.steganography.decode(img)
-      setHiddenMsg(msg || 'No hidden message found')
-    }
+
+    // show the message we decoded server-side:
+    setHiddenMsg(json.hiddenMessage ?? 'No hidden message found')
   }
 
   return (
@@ -27,14 +24,41 @@ export default function Home() {
       <h1>Image Inspector</h1>
       <form onSubmit={handleUpload}>
         <input type="file" name="image" accept="image/*" />
-        <button type="submit">Upload & Inspect</button>
+        <button type="submit" style={{ marginLeft: '1rem' }}>
+          Upload & Inspect
+        </button>
       </form>
+
       {info && (
         <section style={{ marginTop: '2rem' }}>
           <h2>EXIF Metadata</h2>
-          <pre>{JSON.stringify(info.exif, null, 2)}</pre>
+          <pre
+            style={{
+              background: '#f0f0f0',
+              padding: '1rem',
+              borderRadius: '8px',
+            }}
+          >
+            {JSON.stringify(info.exif, null, 2)}
+          </pre>
+
           <h2>Hidden Message</h2>
-          <p>{hiddenMsg}</p>
+          <p
+            style={{
+              background: '#f9f9f9',
+              padding: '1rem',
+              borderRadius: '8px',
+            }}
+          >
+            {hiddenMsg}
+          </p>
+
+          <h2>Preview</h2>
+          <img
+            src={info.dataUrl}
+            alt="Uploaded file"
+            style={{ maxWidth: '100%', borderRadius: '8px' }}
+          />
         </section>
       )}
     </main>
