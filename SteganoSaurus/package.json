@@ -1,5 +1,5 @@
 {
-  "name": "SteganoSaurus",
+  "name": "my-image-inspector",
   "version": "1.0.0",
   "scripts": {
     "dev": "next dev -p 3000",
@@ -12,6 +12,6 @@
     "next": "13.5.1",
     "react": "18.2.0",
     "react-dom": "18.2.0",
-    "steganography.js": "^1.1.0"
+    "@masknet/stego-js": "^0.15.1"
   }
 }
