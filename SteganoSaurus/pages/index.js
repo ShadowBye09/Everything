@@ -1,8 +1,8 @@
 import { useState } from 'react'
 
 export default function Home() {
-  const [info, setInfo] = useState(null)
-  const [hiddenMsg, setHiddenMsg] = useState('')
+  const [info, setInfo]     = useState(null)
+  const [hiddenMsg, setMsg] = useState('')
 
   async function handleUpload(e) {
     e.preventDefault()
@@ -10,13 +10,10 @@ export default function Home() {
     if (!file) return
     const form = new FormData()
     form.append('image', file)
-
-    const res = await fetch('/api/upload', { method: 'POST', body: form })
+    const res  = await fetch('/api/upload', { method: 'POST', body: form })
     const json = await res.json()
     setInfo(json)
-
-    // show the message we decoded server-side:
-    setHiddenMsg(json.hiddenMessage ?? 'No hidden message found')
+    setMsg(json.hiddenMessage ?? 'No hidden message found')
   }
 
   return (
@@ -32,24 +29,12 @@ export default function Home() {
       {info && (
         <section style={{ marginTop: '2rem' }}>
           <h2>EXIF Metadata</h2>
-          <pre
-            style={{
-              background: '#f0f0f0',
-              padding: '1rem',
-              borderRadius: '8px',
-            }}
-          >
+          <pre style={{ background: '#f0f0f0', padding: '1rem', borderRadius: '8px' }}>
             {JSON.stringify(info.exif, null, 2)}
           </pre>
 
           <h2>Hidden Message</h2>
-          <p
-            style={{
-              background: '#f9f9f9',
-              padding: '1rem',
-              borderRadius: '8px',
-            }}
-          >
+          <p style={{ background: '#f9f9f9', padding: '1rem', borderRadius: '8px' }}>
             {hiddenMsg}
           </p>
 
