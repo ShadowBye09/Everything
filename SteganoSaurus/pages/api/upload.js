@@ -3,11 +3,7 @@ import multer from 'multer'
 import { readExif } from '../../utils/exifReader'
 import { readStego } from '../../utils/stegoReader'
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-}
+export const config = { api: { bodyParser: false } }
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -15,12 +11,8 @@ const upload = multer({
 })
 
 const handler = nextConnect({
-  onError(error, req, res) {
-    res.status(500).json({ error: error.message })
-  },
-  onNoMatch(req, res) {
-    res.status(405).json({ error: `Method ${req.method} not allowed` })
-  },
+  onError(error, req, res) { res.status(500).json({ error: error.message }) },
+  onNoMatch(req, res) { res.status(405).json({ error: `Method ${req.method} not allowed` }) },
 })
 
 handler.use(upload.single('image'))
@@ -30,7 +22,6 @@ handler.post((req, res) => {
   const exif = readExif(req.file.buffer)
   const hiddenMessage = readStego(req.file.buffer)
   const dataUrl = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`
-
   res.status(200).json({ exif, hiddenMessage, dataUrl })
 })
 
