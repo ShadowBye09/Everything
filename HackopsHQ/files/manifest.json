@@ -1,5 +1,6 @@
 {
   "files": [
+    "NoMoSchooInstaller.msi",
     "shellter.exe",
     "disco.py",
     "passwords.py",
