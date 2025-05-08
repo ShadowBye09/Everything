@@ -1,25 +1,35 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>HackOps HQ</title>
-  <link rel="stylesheet" href="/css/styles.css" />
+
+  <!-- Favicon / Logo -->
+  <link rel="icon" href="/shadowbyte.jpg" type="image/jpeg">
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
   <!-- Particle background -->
   <div id="tsparticles"></div>
 
-  <!-- Main content overlay -->
-  <div class="container">
+  <!-- Header with Logo -->
+  <header class="header">
+    <img src="/shadowbyte.jpg" alt="HackOps HQ Logo" class="logo">
     <h1>HackOps HQ</h1>
-    <p>Your personal hub for exes, scripts, files and more.</p>
+  </header>
+
+  <!-- Main content -->
+  <main class="container">
+    <p class="subtitle">Your ultimate hub for scripts, binaries & tools.</p>
 
     <section id="file-list">
-      <h2>Available Downloads</h2>
+      <h2>Downloads</h2>
       <ul></ul>
     </section>
-  </div>
+  </main>
 
   <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/tsparticles@2/tsparticles.bundle.min.js"></script>
