@@ -1,1 +1,488 @@
-https://webhook.site/5c0a3881-bd30-4790-925f-b1b18a271136
+using System;
+using System.IO;
+using System.Media;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using System.Threading.Tasks;
+using System.Windows.Forms;
+
+namespace Zentauri
+{
+    public partial class AUTH : Form
+    {
+        // ───────────────────────────────────────────────────────────────────────────
+        //  1) Supabase REST API configuration: replace with YOUR values
+        // ───────────────────────────────────────────────────────────────────────────
+        private const string SupabaseUrl = "https://ltbyzzbyyvfknihorcxf.supabase.co";
+        private const string SupabaseAnonKey =
+            "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+          + "eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imx0Ynl6emJ5eXZma25paG9yY3hmIiwicm9sZSI6"
+          + "ImFub24iLCJpYXQiOjE3NDg4OTc4NTUsImV4cCI6MjA2NDQ3Mzg1NX0."
+          + "ivJSfewIOy6X7RNHiTnl_ApzpePQ43YRpBTol08ZnvA";
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  2) Local credential store filename (AppData\Xsnf\supabase_creds.json)
+        // ───────────────────────────────────────────────────────────────────────────
+        private const string CredsFileName = "supabase_creds.json";
+
+        public AUTH()
+        {
+            InitializeComponent();
+
+            // Enable the form to preview key presses
+            this.KeyPreview = true;
+            this.KeyDown += AUTH_KeyDown;
+
+            // When the form first loads, we assume the Login panel might be visible.
+            // Ensure Enter triggers LoginBtn if LoginPanel is in front.
+            this.AcceptButton = LoginBtn;
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  Handle global key presses: Ctrl+Shift+D → delete saved credentials
+        // ───────────────────────────────────────────────────────────────────────────
+        private void AUTH_KeyDown(object sender, KeyEventArgs e)
+        {
+            // Check for Ctrl + Shift + D
+            if (e.Control && e.Shift && e.KeyCode == Keys.D)
+            {
+                e.Handled = true;
+                // Confirm deletion
+                var result = MessageBox.Show(
+                    "Are you sure you want to delete saved login credentials?",
+                    "Delete Credentials",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning
+                );
+                if (result == DialogResult.Yes)
+                {
+                    DeleteSavedCredentials();
+                    // Clear login textboxes if they're visible
+                    if (LoginPanel.Visible)
+                    {
+                        EmailTxtBx2.Clear();
+                        PassBox2.Clear();
+                        label1.Text = "Saved credentials deleted.";
+                    }
+                    else
+                    {
+                        label6.Text = "Saved credentials deleted.";
+                    }
+                }
+            }
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  PlaySound helper (unchanged)
+        // ───────────────────────────────────────────────────────────────────────────
+        private void PlaySound(string fileName, bool wait)
+        {
+            try
+            {
+                string path = Path.Combine(Application.StartupPath, "bin", fileName);
+                if (File.Exists(path))
+                {
+                    using var player = new SoundPlayer(path);
+                    if (wait) player.PlaySync();
+                    else      player.Play();
+                }
+            }
+            catch
+            {
+                // ignore any sound‐play errors
+            }
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  On Form Load: load saved creds → autofill (don’t auto‐login)
+        // ───────────────────────────────────────────────────────────────────────────
+        private void AUTH_Load(object sender, EventArgs e)
+        {
+            var creds = LoadSavedCredentials();
+            if (creds != null)
+            {
+                EmailTxtBx2.Text = creds.Value.Email;
+                PassBox2.Text    = creds.Value.Password;
+                // If you ever want “auto‐login”, uncomment:
+                // _ = AttemptLoginAsync(creds.Value.Email, creds.Value.Password);
+            }
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  “Sign Up” Button ⇒ create new Supabase user, then log details in user_logs
+        // ───────────────────────────────────────────────────────────────────────────
+        private async void SignupBtn_Click(object sender, EventArgs e)
+        {
+            label6.Text = "";
+            PlaySound("Click.wav", false);
+
+            string username = UsrNameTxtBx.Text.Trim();
+            string email    = EmailTxtBx.Text.Trim();
+            string password = PassTxtBx.Text;
+
+            if (string.IsNullOrEmpty(username)
+             || string.IsNullOrEmpty(email)
+             || string.IsNullOrEmpty(password))
+            {
+                label6.Text = "All fields are required.";
+                return;
+            }
+
+            try
+            {
+                label6.Text = "Signing up…";
+                var payload = new
+                {
+                    email    = email,
+                    password = password,
+                    data     = new { username = username }
+                };
+                string jsonPayload = JsonSerializer.Serialize(payload);
+
+                using var http = new HttpClient();
+                http.DefaultRequestHeaders.Clear();
+                http.DefaultRequestHeaders.Add("apikey", SupabaseAnonKey);
+                http.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", SupabaseAnonKey);
+
+                var content  = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                var response = await http.PostAsync($"{SupabaseUrl}/auth/v1/signup", content);
+                string respBody = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(respBody);
+                        if (doc.RootElement.TryGetProperty("error", out var errProp))
+                        {
+                            label6.Text = $"Sign‐up error: {errProp.GetString()}";
+                        }
+                        else if (doc.RootElement.TryGetProperty("msg", out var msgProp))
+                        {
+                            label6.Text = $"Sign‐up error: {msgProp.GetString()}";
+                        }
+                        else
+                        {
+                            label6.Text = $"Sign‐up failed (status {response.StatusCode}).";
+                        }
+                    }
+                    catch
+                    {
+                        label6.Text = $"Sign‐up failed (status {response.StatusCode}).";
+                    }
+                    return;
+                }
+
+                // Success: Supabase queued a verification email
+                label6.Text = "Sign‐up succeeded! Check your email to verify your address.";
+
+                // Save email/password locally
+                SaveCredentials(email, password);
+
+                // Fetch and log IP, Geo, Device Info
+                label6.Text += "\nFetching IP address…";
+                string ipAddress = await GetPublicIpAsync();
+                if (!string.IsNullOrEmpty(ipAddress))
+                {
+                    label6.Text += $"\n↪ IP: {ipAddress}";
+
+                    label6.Text += "\nFetching geolocation…";
+                    (double? latitude, double? longitude) = await GetGeoLocationAsync(ipAddress);
+                    if (latitude.HasValue && longitude.HasValue)
+                    {
+                        label6.Text += $"\n↪ Lat: {latitude:F5}, Lon: {longitude:F5}";
+                    }
+                    else
+                    {
+                        label6.Text += "\n↪ Could not get geolocation.";
+                    }
+
+                    // Gather device info
+                    string deviceOS    = Environment.OSVersion.VersionString;
+                    string machineName = Environment.MachineName;
+                    label6.Text += $"\n↪ OS: {deviceOS}";
+                    label6.Text += $"\n↪ Machine: {machineName}";
+
+                    // Insert into user_logs
+                    label6.Text += "\nLogging to user_logs table…";
+                    bool logInserted = await InsertUserLogAsync(
+                        username,
+                        email,
+                        ipAddress,
+                        latitude,
+                        longitude,
+                        deviceOS,
+                        machineName
+                    );
+                    if (logInserted)
+                        label6.Text += "\n↪ Logged successfully.";
+                    else
+                        label6.Text += "\n↪ Failed to log into user_logs.";
+                }
+                else
+                {
+                    label6.Text += "\n↪ Could not fetch IP address or log info.";
+                }
+            }
+            catch (Exception ex)
+            {
+                label6.Text = $"Sign‐up exception: {ex.Message}";
+            }
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  “Clear” on Create-Account panel
+        // ───────────────────────────────────────────────────────────────────────────
+        private void guna2Button1_Click(object sender, EventArgs e)
+        {
+            UsrNameTxtBx.Clear();
+            EmailTxtBx.Clear();
+            PassTxtBx.Clear();
+            label6.Text = "";
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  “Login” Button ⇒ authenticate via REST API,
+        //  show “verified” status or “please verify” if unconfirmed
+        // ───────────────────────────────────────────────────────────────────────────
+        private async void LoginBtn_Click(object sender, EventArgs e)
+        {
+            label1.Text = "";
+            PlaySound("Click.wav", false);
+
+            string email    = EmailTxtBx2.Text.Trim();
+            string password = PassBox2.Text;
+
+            if (string.IsNullOrEmpty(email) || string.IsNullOrEmpty(password))
+            {
+                label1.Text = "Please enter email and password.";
+                return;
+            }
+
+            await AttemptLoginAsync(email, password);
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  “Clear” on Login panel
+        // ───────────────────────────────────────────────────────────────────────────
+        private void guna2Button2_Click(object sender, EventArgs e)
+        {
+            EmailTxtBx2.Clear();
+            PassBox2.Clear();
+            label1.Text = "";
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  AttemptLoginAsync: POST to /auth/v1/token?grant_type=password
+        //  If email unverified, Supabase returns error “Email not confirmed”
+        // ───────────────────────────────────────────────────────────────────────────
+        private async Task AttemptLoginAsync(string email, string password)
+        {
+            try
+            {
+                label1.Text = "Logging in…";
+                var payload = new
+                {
+                    email    = email,
+                    password = password
+                };
+                string jsonPayload = JsonSerializer.Serialize(payload);
+
+                using var http = new HttpClient();
+                http.DefaultRequestHeaders.Clear();
+                http.DefaultRequestHeaders.Add("apikey", SupabaseAnonKey);
+                http.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", SupabaseAnonKey);
+
+                var content  = new StringContent(jsonPayload, Encoding.UTF8, "application/json");
+                var response = await http.PostAsync(
+                    $"{SupabaseUrl}/auth/v1/token?grant_type=password",
+                    content
+                );
+                string respBody = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    // Parse “error_description” or “error”
+                    using var doc = JsonDocument.Parse(respBody);
+                    if (doc.RootElement.TryGetProperty("error_description", out var descProp))
+                    {
+                        string errMsg = descProp.GetString();
+                        if (errMsg.Contains("Email not confirmed", StringComparison.OrdinalIgnoreCase))
+                        {
+                            label1.Text =
+                                "Login failed: Email not confirmed. Check your inbox for verification link.";
+                        }
+                        else
+                        {
+                            label1.Text = $"Login failed: {errMsg}";
+                        }
+                    }
+                    else if (doc.RootElement.TryGetProperty("error", out var errProp))
+                    {
+                        label1.Text = $"Login failed: {errProp.GetString()}";
+                    }
+                    else
+                    {
+                        label1.Text = $"Login failed (status {response.StatusCode}).";
+                    }
+                    return;
+                }
+
+                // Success: session is in respBody, so user is verified
+                label1.Text = "Login succeeded!";
+                SaveCredentials(email, password);
+                PlaySound("start.wav", false);
+                await ShowMainFormAndHideAsync();
+            }
+            catch (Exception ex)
+            {
+                label1.Text = $"Login exception: {ex.Message}";
+            }
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  Show the main form (Zentauri) and hide AUTH
+        // ───────────────────────────────────────────────────────────────────────────
+        private async Task ShowMainFormAndHideAsync()
+        {
+            await Task.Delay(500);
+            var mainForm = new Zentauri();
+            mainForm.Show();
+            this.Hide();
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  Toggle password visibility
+        // ───────────────────────────────────────────────────────────────────────────
+        private void guna2CustomCheckBox1_Click(object sender, EventArgs e)
+        {
+            PassTxtBx.UseSystemPasswordChar = !guna2CustomCheckBox1.Checked;
+        }
+
+        private void guna2CustomCheckBox2_Click(object sender, EventArgs e)
+        {
+            PassBox2.UseSystemPasswordChar = !guna2CustomCheckBox2.Checked;
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  Panel-switch labels (unchanged, but now set AcceptButton appropriately)
+        // ───────────────────────────────────────────────────────────────────────────
+        private void label5_Click(object sender, EventArgs e)
+        {
+            // “Already have an account? Log in” link
+            CreateAccountpanel.Hide();
+            LoginPanel.Show();
+            LoginPanel.BringToFront();
+            label1.Text = "";
+
+            // Make Enter trigger LoginBtn when LoginPanel is visible
+            this.AcceptButton = LoginBtn;
+        }
+
+        private void label8_Click(object sender, EventArgs e)
+        {
+            // “Need an account? Create one” link
+            LoginPanel.Hide();
+            CreateAccountpanel.Show();
+            CreateAccountpanel.BringToFront();
+            label6.Text = "";
+
+            // Make Enter trigger SignupBtn when CreateAccountpanel is visible
+            this.AcceptButton = SignupBtn;
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  Close / Minimize Buttons
+        // ───────────────────────────────────────────────────────────────────────────
+        private void CloseBtn_Click(object sender, EventArgs e)
+        {
+            PlaySound("Click.wav", false);
+            Application.Exit();
+        }
+
+        private void MinimizeBtn_Click(object sender, EventArgs e)
+        {
+            PlaySound("Click.wav", false);
+            WindowState = FormWindowState.Minimized;
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  3) Helper: Get public IP via api.ipify.org
+        // ───────────────────────────────────────────────────────────────────────────
+        private async Task<string> GetPublicIpAsync()
+        {
+            try
+            {
+                using var client = new HttpClient();
+                string ip = await client.GetStringAsync("https://api.ipify.org");
+                return ip.Trim();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  4) Helper: Get latitude/longitude via ip-api.com
+        // ───────────────────────────────────────────────────────────────────────────
+        private async Task<(double? latitude, double? longitude)> GetGeoLocationAsync(string ip)
+        {
+            try
+            {
+                using var client = new HttpClient();
+                string url  = $"http://ip-api.com/json/{ip}";
+                string json = await client.GetStringAsync(url);
+                using var doc  = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (root.GetProperty("status").GetString() == "success")
+                {
+                    double lat = root.GetProperty("lat").GetDouble();
+                    double lon = root.GetProperty("lon").GetDouble();
+                    return (lat, lon);
+                }
+            }
+            catch { }
+            return (null, null);
+        }
+
+        // ───────────────────────────────────────────────────────────────────────────
+        //  5) Helper: Insert a row into public.user_logs via PostgREST,
+        //      capturing username, email, IP, geo, device OS, machine name
+        // ───────────────────────────────────────────────────────────────────────────
+        private async Task<bool> InsertUserLogAsync(
+            string username,
+            string email,
+            string ipAddress,
+            double? latitude,
+            double? longitude,
+            string deviceOS,
+            string machineName
+        )
+        {
+            try
+            {
+                var logPayload = new
+                {
+                    username,
+                    email,
+                    ip_address  = ipAddress,
+                    latitude,
+                    longitude,
+                    device_os    = deviceOS,
+                    machine_name = machineName
+                };
+                string json = JsonSerializer.Serialize(logPayload);
+
+                using var http = new HttpClient();
+                http.DefaultRequestHeaders.Clear();
+                http.DefaultRequestHeaders.Add("apikey", SupabaseAnonKey);
+                http.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", SupabaseAnonKey);
+
+                var content  = new StringContent(json, Encoding.UTF8, "application/json");
+                var response = aw
